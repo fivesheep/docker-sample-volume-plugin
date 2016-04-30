@@ -13,6 +13,7 @@ var (
 	pluginName = "mdvp"
 )
 
+// volumeInfo keeps a track of whetehr the volume is mounted or not
 type volumeInfo struct {
 	isMounted bool
 }
@@ -215,7 +216,7 @@ func (self *MyDockerVolumePlugin) List(req v.Request) v.Response {
 
 // --- Plugin handlers end here ---
 
-// return the default prod config for ad_service
+// NewMyDockerVolumePlugin returns the volume driver object
 func NewMyDockerVolumePlugin(path string) (*MyDockerVolumePlugin, error) {
 	mdnp := &MyDockerVolumePlugin{
 		rootPathOnDisk: path,
