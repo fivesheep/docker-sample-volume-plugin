@@ -1,40 +1,68 @@
 # mdvp
 
--------------------------------------------
-:Testing of my docker volume plugin (mdvp):
--------------------------------------------
-I use the "/tmp" folder as the root volume. Every subsequent volume is created under /tmp.
-Copy mdvp.json to /etc/docker/plugins/
-Start the plugin: sudo ./bin/main 
-Restart docker service.
-Container 1:
-  docker run -v redis-db:/data --volume-driver=mdvp --name test-redis1 --rm=true redis
-  docker exec -it test-redis1 bash
-  redis-cli
-  SET mykey "Hello"
-  SAVE
-  exit the cli and stop this container
-Container 2:
-  docker run -v redis-db:/data --volume-driver=mdvp --name test-redis2 redis
-  docker exec -it test-redis2 bash
-  redis-cli
-  GET mykey
-  APPEND mykey " world" - optional
-  SAVE - optional
-  do NOT stop this container, start container 3
-Container 3:
-  docker run -v redis-db:/data --volume-driver=mdvp --name test-redis3 redis
-  You will get an error:
-    "docker: Error response from daemon: VolumeDriver.Mount: Mount operation on an already mounted volume!. See 'docker run --help'."
----------------------------------------------
-:To delete the volumes at the end of testing:
----------------------------------------------
-docker volume  rm redis-db
+========
+:Design:
+========
+----------------------
+:Docker volume plugin:
+----------------------
+  I use the "/tmp" folder as the root volume in the custom plugin. Every subsequent volume is created under /tmp.
+  This plugin can be activated by copying the provided mdvp.json to /etc/docker/plugins/, starting the service (which run on port 3004), and then restarting docker to detect the plugin.
+  The plugin does not allow a volume to be mounted in multiple containers.
+  This can be changed in code, if the functionality is required.
+  The advantage of this would be to map a volume to multiple containers & let filesystem events on one container trigger changes in another container.
+  The disadvantage of this feature will be that in such a case, we have to involve mutual exclusion principles. For eg, 2 containers writing to the same file simultaneously.
+----------------------------------
+:Filesystem sync to redis service:
+----------------------------------
+  I use a custom docker image which runs a redis server & a custom service which keeps a watch on /foo, & updates redis whenever an event occurs under /foo.
+  The custom service uses inotify to watch for events in side the container at /foo. As soon as it receives an event, it parses/analyses the even and triggers the appropriate redis-cli to update redis.
+  I had the option of running the custom service in 2 ways: outside the redis container & inside the redis container.
+  The advantage of running inside the container is that redis-cli is already available to interact with redis db. The advantage of running outside the container is that it is easier to update multiple redis DBs (on same or different hosts) on a file system notification.
+  I chose to co-locate the service with redis inside the container as:
+    1. Each service handles only one redis DB update. It fits with the unix philosophy of small modules doing only one thing efficiently. Easier to debug, maintain, understand. No overhead of testing/debugging network activity.
+    2. If multiple redis DBs were to be synced based on filesystem events, & assuming that we will not be running multiple redis DBs in the same host, then such a filesystem can be NFS/central storage service, which can be mounted locally, which again ties with the concept of simplicity in the system, & provides us with composable services, rather than one huge service that tries to do everything.
+  The custom service syncs only from disk to redis, not from redis to disk, as stated in the scenario discussed.
+  We can achieve redis to disk sync by configuring redis to send event notification when things change in a keyspace. (Ref: http://download.redis.io/redis-stable/redis.conf under EVENT NOTIFICATION.)
+  Also, I do not handle directory-level updates in the service; that is, if /foo/X is created, I would print an error, & continue waiting for further notifications. This is beyond the scope of what is described in the scenario.
+  The services are started by supervisord, & logs are stored under /var/log/supervisor.
+=========
+:Testing:
+=========
+  Build the volume plugin: godep go install src/example.com/project/mdvp/main.go
+  Start the volume plugin: sudo ./bin/main
+  Restart docker: sudo service docker restart
+  Build & Run custom redis image: docker build -t krish/test:v1 . && docker run --detach --volume redis-vol:/foo --volume-driver=mdvp --name test-redis1 krish/test:v1 && docker exec -it test-redis1 bash
+  Inside the container:
+    redis-cli get key1 => will have nil; nothing yet
+    cd /foo && echo value1 > key1
+  Outside the container:
+    cd /tmp/redis-vol && sudo bash -c "echo value2 > key2"
+  Inside the container :
+    ls /foo => will have key1 & key2 files
+    cat /foo/key1 => will have value1
+    cat /foo/key2 => will have value2
+    redis-cli get key1 => will have value1
+    redis-cli get key2 => will have value2
+  Inside the container:
+    rm /foo/key1
+    redis-cli get key1 => will have (nil)
+  Inside the container:
+    mv /foo/key2 /foo/new_key
+    redis-cli get key2 => will have (nil)
+    redis-cli get new_key => will have value2
+    echo "hi" > /foo/new_key
+    redis-cli get new_key => will have hi
+---------
+:Cleanup:
+---------
+docker volume  rm redis-vol
+docker stop test-redis1 && docker rm test-redis1
+Logs for the notification service are located @tail -F /var/log/supervisor/supervisord.log inside the container
 ------------
 :References:
 ------------
   https://github.com/docker/docker/blob/master/docs/extend/plugin_api.md
   https://github.com/docker/libnetwork/blob/master/docs/design.md
   https://github.com/docker/libnetwork/blob/master/docs/remote.md
-
 
