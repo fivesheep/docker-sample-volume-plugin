@@ -1,0 +1,35 @@
+{
+	"ImportPath": ".",
+	"GoVersion": "go1.5",
+	"GodepVersion": "v62",
+	"Deps": [
+		{
+			"ImportPath": "golang.org/x/exp/inotify",
+			"Rev": "4ca50ec68f67aca141c668bae27708fc75b018ed"
+		},
+		{
+			"ImportPath": "gopkg.in/bsm/ratelimit.v1",
+			"Rev": "db14e161995a5177acef654cb0dd785e8ee8bc22"
+		},
+		{
+			"ImportPath": "gopkg.in/redis.v3",
+			"Comment": "v3.6.1",
+			"Rev": "b3514029955f38f2a1120b5c3ad59f241d9eecca"
+		},
+		{
+			"ImportPath": "gopkg.in/redis.v3/internal/consistenthash",
+			"Comment": "v3.6.1",
+			"Rev": "b3514029955f38f2a1120b5c3ad59f241d9eecca"
+		},
+		{
+			"ImportPath": "gopkg.in/redis.v3/internal/hashtag",
+			"Comment": "v3.6.1",
+			"Rev": "b3514029955f38f2a1120b5c3ad59f241d9eecca"
+		},
+		{
+			"ImportPath": "gopkg.in/redis.v3/internal/pool",
+			"Comment": "v3.6.1",
+			"Rev": "b3514029955f38f2a1120b5c3ad59f241d9eecca"
+		}
+	]
+}
